@@ -1,0 +1,32 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "GCG",
+    "PMP",
+    "IRI"
+  ],
+  "key": {
+    "G": {
+      "item": "minecraft:glass"
+    },
+    "C": {
+      "item": "minecraft:compass"
+    },
+    "P": {
+      "item": "minecraft:prismarine"
+    },
+    "M": {
+      "item": "minecraft:map"
+    },
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "R": {
+      "item": "minecraft:redstone"
+    }
+  },
+  "result": {
+    "item": "submarine:submarine_blueprint",
+    "count": 1
+  }
+}

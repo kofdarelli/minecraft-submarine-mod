@@ -1,0 +1,221 @@
+plugins {
+    id "fabric-loom" version "1.10.5"
+    id "maven-publish"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+    maven { name = "Fabric"; url = "https://maven.fabricmc.net/" }
+    maven { name = "Valkyrien Skies"; url = "https://maven.valkyrienskies.org" }
+    maven { name = "Modrinth"; url = "https://api.modrinth.com/maven" }
+    maven { name = "Architectury"; url = "https://maven.architectury.dev/" }
+    maven { name = "Terraformers"; url = "https://maven.terraformersmc.com/releases/" }
+    maven { name = "Shedaniel"; url = "https://maven.shedaniel.me/" }
+    maven { name = "DevOS"; url = "https://mvn.devos.one/snapshots/" }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+    withSourcesJar()
+}
+
+loom {
+    mods {
+        submarine {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+sourceSets.main.java.srcDir("src/client/java")
+
+configurations.configureEach {
+    resolutionStrategy {
+        force "org.joml:joml:1.10.5"
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+
+    modImplementation("org.valkyrienskies:valkyrienskies-120-fabric:${vs2_version}") {
+        exclude group: "com.simibubi"
+        exclude group: "dev.engine-room"
+        exclude group: "com.jozufozu"
+    }
+    implementation("org.valkyrienskies.core:api:${vscore_version}") {
+        exclude group: "org.joml"
+    }
+    implementation("org.valkyrienskies.core:internal:${vscore_version}") {
+        exclude group: "org.joml"
+    }
+    implementation("org.valkyrienskies.core:util:${vscore_version}") {
+        exclude group: "org.joml"
+    }
+}
+
+def generatedResources = layout.buildDirectory.dir("generated/submarineResources")
+
+tasks.register("generateStarterSubStructure") {
+    def outputFile = generatedResources.map { it.file("data/submarine/structures/starter_sub.nbt") }
+    outputs.file(outputFile)
+    doLast {
+        def file = outputFile.get().asFile
+        file.parentFile.mkdirs()
+        file.bytes = generateStarterSubNbt()
+    }
+}
+
+sourceSets.main.resources.srcDir(generatedResources)
+processResources.dependsOn("generateStarterSubStructure")
+sourcesJar.dependsOn("generateStarterSubStructure")
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 17
+    options.encoding = "UTF-8"
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${archivesBaseName}" }
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifactId = project.archives_base_name
+            from components.java
+        }
+    }
+}
+
+static byte[] generateStarterSubNbt() {
+    def raw = new ByteArrayOutputStream()
+    def out = new DataOutputStream(raw)
+
+    def writeUtf = { DataOutputStream data, String value ->
+        byte[] bytes = value.getBytes("UTF-8")
+        data.writeShort(bytes.length)
+        data.write(bytes)
+    }
+    def named = { DataOutputStream data, int type, String name ->
+        data.writeByte(type)
+        writeUtf(data, name)
+    }
+    def writeIntArray = { DataOutputStream data, String name, int[] values ->
+        named(data, 11, name)
+        data.writeInt(values.length)
+        values.each { data.writeInt(it) }
+    }
+    def writeString = { DataOutputStream data, String name, String value ->
+        named(data, 8, name)
+        writeUtf(data, value)
+    }
+
+    def palette = [
+        "minecraft:polished_deepslate",
+        "minecraft:deepslate_tiles",
+        "minecraft:cyan_stained_glass",
+        "minecraft:sea_lantern",
+        "minecraft:dark_oak_stairs",
+        "minecraft:ladder",
+        "minecraft:barrel",
+        "minecraft:chest",
+        "minecraft:furnace"
+    ]
+    def paletteIndex = [:]
+    palette.eachWithIndex { block, index -> paletteIndex[block] = index }
+    def blocks = []
+    def put = { int x, int y, int z, String block ->
+        blocks.add([x, y, z, paletteIndex[block]])
+    }
+    for (int x = 0; x < 23; x++) {
+        for (int y = 0; y <= 4; y++) {
+            for (int z = 0; z < 7; z++) {
+                boolean shell = y == 0 || y == 4 || z == 0 || z == 6
+                if (shell) {
+                    put(x, y, z, (x % 5 == 0 || y == 0) ? "minecraft:deepslate_tiles" : "minecraft:polished_deepslate")
+                }
+            }
+        }
+    }
+    for (int y = 1; y <= 3; y++) {
+        for (int z = 1; z <= 5; z++) {
+            put(0, y, z, "minecraft:cyan_stained_glass")
+        }
+    }
+    [[5, 2, 0], [6, 2, 0], [10, 2, 0], [11, 2, 0], [15, 2, 0], [16, 2, 0],
+     [5, 2, 6], [6, 2, 6], [10, 2, 6], [11, 2, 6], [15, 2, 6], [16, 2, 6]].each {
+        put(it[0], it[1], it[2], "minecraft:cyan_stained_glass")
+    }
+    [[2, 1, 3], [5, 1, 2], [5, 1, 4], [13, 1, 2], [13, 1, 4]].each {
+        put(it[0], it[1], it[2], "minecraft:dark_oak_stairs")
+    }
+    [[4, 2, 1], [8, 3, 3], [14, 2, 5], [19, 3, 3]].each {
+        put(it[0], it[1], it[2], "minecraft:sea_lantern")
+    }
+    for (int y = 1; y <= 3; y++) {
+        put(10, y, 3, "minecraft:ladder")
+    }
+    [[7, 1, 1], [7, 1, 5], [17, 1, 1], [17, 1, 5]].each {
+        put(it[0], it[1], it[2], "minecraft:barrel")
+    }
+    put(9, 1, 1, "minecraft:chest")
+    put(18, 1, 3, "minecraft:furnace")
+
+    out.writeByte(10)
+    writeUtf(out, "")
+    named(out, 3, "DataVersion")
+    out.writeInt(3465)
+    writeIntArray(out, "size", [23, 7, 7] as int[])
+
+    named(out, 9, "palette")
+    out.writeByte(10)
+    out.writeInt(palette.size())
+    palette.each { block ->
+        writeString(out, "Name", block)
+        out.writeByte(0)
+    }
+
+    named(out, 9, "blocks")
+    out.writeByte(10)
+    out.writeInt(blocks.size())
+    blocks.each { entry ->
+        writeIntArray(out, "pos", [entry[0], entry[1], entry[2]] as int[])
+        named(out, 3, "state")
+        out.writeInt(entry[3])
+        out.writeByte(0)
+    }
+
+    named(out, 9, "entities")
+    out.writeByte(10)
+    out.writeInt(0)
+    out.writeByte(0)
+    out.close()
+
+    def compressed = new ByteArrayOutputStream()
+    def gzip = new java.util.zip.GZIPOutputStream(compressed)
+    gzip.write(raw.toByteArray())
+    gzip.close()
+    return compressed.toByteArray()
+}
