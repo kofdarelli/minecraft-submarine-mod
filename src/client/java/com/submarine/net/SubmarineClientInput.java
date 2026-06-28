@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
 
 public final class SubmarineClientInput {
     private SubmarineClientInput() {
@@ -17,7 +18,19 @@ public final class SubmarineClientInput {
 
     private static void tick(Minecraft minecraft) {
         LocalPlayer player = minecraft.player;
-        if (player == null || !(player.getVehicle() instanceof SubmarineSeatEntity seat) || !seat.isPilotSeat()) {
+        if (player == null || !(player.getVehicle() instanceof SubmarineSeatEntity seat)) {
+            return;
+        }
+
+        if (!seat.isPilotSeat()) {
+            Options options = minecraft.options;
+            boolean anyKey = options.keyUp.isDown() || options.keyDown.isDown()
+                    || options.keyLeft.isDown() || options.keyRight.isDown()
+                    || options.keyJump.isDown() || options.keyShift.isDown();
+            if (anyKey) {
+                player.displayClientMessage(
+                        Component.translatable("message.submarine.pilot_only"), true);
+            }
             return;
         }
 

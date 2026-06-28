@@ -1,7 +1,6 @@
 package com.submarine.command;
 
 import com.mojang.brigadier.Command;
-import com.submarine.control.SubmarineController;
 import com.submarine.template.SubmarineSpawner;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.Commands;
@@ -13,7 +12,6 @@ public final class SubmarineCommands {
     }
 
     public static void register() {
-        SubmarineController.register();
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 dispatcher.register(Commands.literal("submarine")
                         .requires(source -> source.hasPermission(2))
@@ -28,5 +26,7 @@ public final class SubmarineCommands {
                                         })))));
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 SubmarineTestCommands.register(dispatcher));
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
+                SubmarineManageCommands.register(dispatcher));
     }
 }

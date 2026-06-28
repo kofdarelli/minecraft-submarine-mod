@@ -1,6 +1,7 @@
 package com.submarine;
 
 import com.submarine.command.SubmarineCommands;
+import com.submarine.control.SubmarineController;
 import com.submarine.entity.ModEntities;
 import com.submarine.item.ModItems;
 import com.submarine.net.SubmarineNetworking;
@@ -21,6 +22,7 @@ public final class SubmarineMod implements ModInitializer {
         SubmarineNetworking.registerServerReceivers();
         SubmarineProtection.registerEvents();
         SubmarineSeatManager.registerServerTicks();
+        SubmarineController.register();
         SubmarineCommands.register();
     }
 }
