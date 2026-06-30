@@ -11,6 +11,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Vector3d;
 import org.valkyrienskies.core.api.ships.ServerShip;
@@ -22,13 +23,41 @@ public final class SubmarineSpawner {
     }
 
     public static ServerShip spawnStarterSub(ServerLevel level, Player owner, BlockPos requestedOrigin) {
-        BlockPos origin = requestedOrigin;
-        Map<BlockPos, BlockState> localBlocks = StarterSubmarineTemplate.buildBlocks();
-        Set<BlockPos> blockSet = new HashSet<>();
+        return spawnSubmarine(level, owner, requestedOrigin, StarterSubmarineTemplate.TEMPLATE);
+    }
 
+    public static ServerShip spawnOceanPearl(ServerLevel level, Player owner, BlockPos requestedOrigin) {
+        return spawnSubmarine(level, owner, requestedOrigin, OceanPearlSubmarineBuilder.TEMPLATE);
+    }
+
+    /** Builds, ships and registers any {@link SubmarineTemplate} the same way, regardless of its shape. */
+    public static ServerShip spawnSubmarine(ServerLevel level, Player owner, BlockPos requestedOrigin, SubmarineTemplate template) {
+        BlockPos origin = requestedOrigin;
+        Map<BlockPos, BlockState> localBlocks = template.buildBlocks();
+        Set<BlockPos> blockSet = new HashSet<>();
+        BlockPos min = template.minLocal();
+        BlockPos max = template.maxLocal();
+
+        // Evict water from the full bounding box before placing blocks. Without this,
+        // fluid updates triggered by the first hull blocks cause water to pour into
+        // every gap that hasn't been filled yet, waterlogging the trapdoor, ladder,
+        // and stairs in the process.
+        for (int x = min.getX(); x <= max.getX(); x++) {
+            for (int y = min.getY(); y <= max.getY(); y++) {
+                for (int z = min.getZ(); z <= max.getZ(); z++) {
+                    BlockPos pos = origin.offset(x, y, z);
+                    if (!level.getFluidState(pos).isEmpty()) {
+                        level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
+                    }
+                }
+            }
+        }
+
+        // Place blocks with UPDATE_KNOWN_SHAPE (16) so neighboring fluid states
+        // cannot waterlog the newly placed blocks during the placement loop.
         for (Map.Entry<BlockPos, BlockState> entry : localBlocks.entrySet()) {
             BlockPos worldPos = origin.offset(entry.getKey());
-            level.setBlock(worldPos, entry.getValue(), 3);
+            level.setBlock(worldPos, entry.getValue(), 2 | 16);
             blockSet.add(worldPos);
         }
 
@@ -47,11 +76,23 @@ public final class SubmarineSpawner {
         SubmarineMetadata metadata = new SubmarineMetadata(
                 ship.getId(),
                 ownerId,
-                StarterSubmarineTemplate.ID,
+                template.id(),
                 VSGameUtilsKt.getDimensionId(level),
                 shipyardOrigin
         );
         SubmarineSavedData.get(level).put(metadata);
+
+        // The VS shipyard may be in an ocean chunk, leaving water in any interior
+        // position that isn't occupied by a hull or furniture block. Clear it now.
+        for (BlockPos local : template.allLocalPositions()) {
+            if (!localBlocks.containsKey(local)) {
+                BlockPos shipyardPos = metadata.toShipyard(local);
+                if (!level.getFluidState(shipyardPos).isEmpty()) {
+                    level.setBlock(shipyardPos, Blocks.AIR.defaultBlockState(), 3);
+                }
+            }
+        }
+
         SubmarineSeatManager.ensureSeats(level, metadata);
 
         if (owner != null) {

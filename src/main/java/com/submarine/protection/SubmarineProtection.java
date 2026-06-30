@@ -4,7 +4,8 @@ import com.submarine.data.SubmarineMetadata;
 import com.submarine.data.SubmarineSavedData;
 import com.submarine.item.ModItems;
 import com.submarine.seat.SubmarineSeatManager;
-import com.submarine.template.StarterSubmarineTemplate;
+import com.submarine.template.SubmarineTemplate;
+import com.submarine.template.SubmarineTemplates;
 import java.util.Optional;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
@@ -86,17 +87,19 @@ public final class SubmarineProtection {
     }
 
     private static boolean canBreak(BlockPos shipyardPos, SubmarineMetadata metadata) {
+        SubmarineTemplate template = SubmarineTemplates.get(metadata.templateId());
         BlockPos local = metadata.toLocal(shipyardPos);
-        return StarterSubmarineTemplate.isEditable(local)
-                && !StarterSubmarineTemplate.protectedLocalPositions().contains(local.asLong());
+        return template.isEditable(local)
+                && !template.protectedLocalPositions().contains(local.asLong());
     }
 
     private static boolean canPlace(ServerLevel level, BlockPos shipyardPos, SubmarineMetadata metadata) {
+        SubmarineTemplate template = SubmarineTemplates.get(metadata.templateId());
         BlockPos local = metadata.toLocal(shipyardPos);
-        if (!StarterSubmarineTemplate.isEditable(local)) {
+        if (!template.isEditable(local)) {
             return false;
         }
-        if (StarterSubmarineTemplate.protectedLocalPositions().contains(local.asLong())) {
+        if (template.protectedLocalPositions().contains(local.asLong())) {
             return false;
         }
         BlockState existing = level.getBlockState(shipyardPos);

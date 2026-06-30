@@ -14,10 +14,7 @@ public final class SubmarineClient implements ClientModInitializer {
         EntityRendererRegistry.register(ModEntities.SEAT, EmptySeatRenderer::new);
         SubmarineClientInput.register();
         SubmarineAutomationClient.register();
-<<<<<<< HEAD
-=======
         HudRenderCallback.EVENT.register(SubmarineHud::render);
->>>>>>> 18c3b34e6c4faed0a9b9ab5b8543b551638fc862
         ClientPlayNetworking.registerGlobalReceiver(SubmarineNetworking.QUIT_CLIENT,
                 (client, handler, buf, responseSender) -> client.execute(client::stop));
     }

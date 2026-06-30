@@ -12,8 +12,8 @@ import net.minecraft.world.entity.MobCategory;
 public final class ModEntities {
     public static final EntityType<SubmarineSeatEntity> SEAT = FabricEntityTypeBuilder
             .<SubmarineSeatEntity>create(MobCategory.MISC, SubmarineSeatEntity::new)
-            .dimensions(EntityDimensions.fixed(0.001F, 0.001F))
-            .trackRangeBlocks(96)
+            .dimensions(EntityDimensions.fixed(0.75F, 0.75F))
+            .trackRangeBlocks(256)
             .trackedUpdateRate(1)
             .forceTrackedVelocityUpdates(false)
             .build();

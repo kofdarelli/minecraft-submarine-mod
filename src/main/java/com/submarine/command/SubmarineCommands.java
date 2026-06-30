@@ -28,5 +28,6 @@ public final class SubmarineCommands {
                 SubmarineTestCommands.register(dispatcher));
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 SubmarineManageCommands.register(dispatcher));
+        OceanPearlCommands.register();
     }
 }

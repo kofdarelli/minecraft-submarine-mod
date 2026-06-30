@@ -9,7 +9,8 @@ import com.submarine.data.SubmarineMetadata;
 import com.submarine.data.SubmarineSavedData;
 import com.submarine.entity.ModEntities;
 import com.submarine.entity.SubmarineSeatEntity;
-import com.submarine.template.StarterSubmarineTemplate;
+import com.submarine.template.SubmarineTemplate;
+import com.submarine.template.SubmarineTemplates;
 import java.util.ArrayList;
 import java.util.Optional;
 import net.minecraft.commands.CommandSourceStack;
@@ -91,7 +92,8 @@ public final class SubmarineManageCommands {
 
         ejectAllPassengers(level, meta);
 
-        for (BlockPos localPos : StarterSubmarineTemplate.allLocalPositions()) {
+        SubmarineTemplate template = SubmarineTemplates.get(meta.templateId());
+        for (BlockPos localPos : template.allLocalPositions()) {
             level.setBlock(meta.toShipyard(localPos), Blocks.AIR.defaultBlockState(), 3);
         }
 
@@ -126,8 +128,8 @@ public final class SubmarineManageCommands {
 
     private static void ejectAllPassengers(ServerLevel level, SubmarineMetadata meta) {
         BlockPos origin = meta.shipyardOrigin();
-        AABB searchBox = new AABB(origin).inflate(
-                StarterSubmarineTemplate.LENGTH + StarterSubmarineTemplate.WIDTH);
+        SubmarineTemplate template = SubmarineTemplates.get(meta.templateId());
+        AABB searchBox = new AABB(origin).inflate(template.searchRadius());
         for (SubmarineSeatEntity seat : new ArrayList<>(
                 level.getEntities(ModEntities.SEAT, searchBox, s -> s.getShipId() == meta.shipId()))) {
             seat.ejectPassengers();

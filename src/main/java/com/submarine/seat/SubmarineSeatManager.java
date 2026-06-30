@@ -5,11 +5,13 @@ import com.submarine.data.SubmarineSavedData;
 import com.submarine.entity.ModEntities;
 import com.submarine.entity.SubmarineSeatEntity;
 import com.submarine.template.SeatSpec;
-import com.submarine.template.StarterSubmarineTemplate;
+import com.submarine.template.SubmarineTemplate;
+import com.submarine.template.SubmarineTemplates;
 import java.util.ArrayList;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
@@ -40,7 +42,8 @@ public final class SubmarineSeatManager {
     }
 
     public static InteractionResult tryUseSeat(ServerPlayer player, ServerLevel level, SubmarineMetadata metadata, BlockPos shipyardPos) {
-        SeatSpec seatSpec = StarterSubmarineTemplate.seatAt(metadata.toLocal(shipyardPos));
+        SubmarineTemplate template = SubmarineTemplates.get(metadata.templateId());
+        SeatSpec seatSpec = template.seatAt(metadata.toLocal(shipyardPos));
         if (seatSpec == null) {
             return InteractionResult.PASS;
         }
@@ -56,12 +59,26 @@ public final class SubmarineSeatManager {
             return InteractionResult.SUCCESS;
         }
 
-        player.startRiding(seat, true);
+        // Force the client to know about this entity before mounting — VS2's shipyard
+        // may be outside the player's normal entity-tracking range (256 blocks now, but
+        // still potentially far).  Sending the spawn + data packets directly ensures the
+        // client has the entity in its registry before startRiding delivers the passenger
+        // packet.
+        player.connection.send(seat.getAddEntityPacket());
+        var nonDefault = seat.getEntityData().getNonDefaultValues();
+        if (nonDefault != null && !nonDefault.isEmpty()) {
+            player.connection.send(new ClientboundSetEntityDataPacket(seat.getId(), nonDefault));
+        }
+
+        if (!player.startRiding(seat, true)) {
+            return InteractionResult.FAIL;
+        }
         return InteractionResult.SUCCESS;
     }
 
     public static void ensureSeats(ServerLevel level, SubmarineMetadata metadata) {
-        for (SeatSpec seat : StarterSubmarineTemplate.SEATS) {
+        SubmarineTemplate template = SubmarineTemplates.get(metadata.templateId());
+        for (SeatSpec seat : template.seats()) {
             findOrCreateSeat(level, metadata, seat);
         }
     }

@@ -128,24 +128,20 @@ public final class SubmarineTestCommands {
     private static void testTemplateIntegrity(TestContext context) {
         Map<BlockPos, BlockState> blocks = StarterSubmarineTemplate.buildBlocks();
         require(!blocks.isEmpty(), "starter template has no blocks");
-        require(blocks.get(new BlockPos(0, 2, 3)).is(Blocks.CYAN_STAINED_GLASS), "front window is missing");
-        require(blocks.get(new BlockPos(10, 1, 3)).is(Blocks.LADDER), "interior ladder is missing");
-        require(blocks.get(new BlockPos(10, 6, 3)).is(Blocks.SEA_LANTERN), "conning tower light is missing");
+        require(blocks.get(new BlockPos(0, 4, 4)).is(Blocks.CYAN_STAINED_GLASS), "cockpit canopy is missing");
+        require(blocks.get(new BlockPos(15, 5, 4)).is(Blocks.LADDER), "conning tower ladder is missing");
+        require(blocks.get(new BlockPos(15, 11, 4)).is(Blocks.SEA_LANTERN), "conning tower beacon is missing");
         require(StarterSubmarineTemplate.SEATS.size() == 5, "expected 5 seat specs");
-        require(StarterSubmarineTemplate.seatAt(new BlockPos(2, 1, 3)) != null, "pilot seat spec is missing");
-        require(StarterSubmarineTemplate.isEditable(new BlockPos(2, 2, 2)), "interior edit volume is not editable");
+        require(StarterSubmarineTemplate.seatAt(new BlockPos(3, 3, 4)) != null, "pilot seat spec is missing");
+        require(StarterSubmarineTemplate.isEditable(new BlockPos(10, 4, 4)), "interior edit volume is not editable");
         require(!StarterSubmarineTemplate.isEditable(new BlockPos(0, 0, 0)), "outer hull should not be editable");
-        require(StarterSubmarineTemplate.protectedLocalPositions().contains(new BlockPos(0, 2, 3).asLong()),
-                "front window is not protected");
+        require(StarterSubmarineTemplate.protectedLocalPositions().contains(new BlockPos(3, 3, 4).asLong()),
+                "pilot seat is not protected");
         context.source().sendSuccess(() -> Component.literal("   checked " + blocks.size() + " template blocks"), false);
     }
 
     private static void testMetadataRoundTrip(TestContext context) {
-<<<<<<< HEAD
-        UUID owner = UUID.nameUUIDFromBytes("submarine-test-owner".getBytes(java.nio.charset.StandardCharsets.UTF_8));
-=======
         UUID owner = UUID.nameUUIDFromBytes("submarine-test-owner".getBytes(StandardCharsets.UTF_8));
->>>>>>> 18c3b34e6c4faed0a9b9ab5b8543b551638fc862
         BlockPos origin = new BlockPos(10, 20, 30);
         SubmarineMetadata metadata = new SubmarineMetadata(42L, owner, StarterSubmarineTemplate.ID, "minecraft:overworld", origin);
         SubmarineMetadata loaded = SubmarineMetadata.load(metadata.save());

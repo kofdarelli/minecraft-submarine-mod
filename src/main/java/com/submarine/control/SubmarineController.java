@@ -5,7 +5,8 @@ import com.submarine.data.SubmarineSavedData;
 import com.submarine.entity.SubmarineSeatEntity;
 import com.submarine.net.SubmarineInput;
 import com.submarine.net.SubmarineNetworking;
-import com.submarine.template.StarterSubmarineTemplate;
+import com.submarine.template.SubmarineTemplate;
+import com.submarine.template.SubmarineTemplates;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.level.ServerLevel;
 import org.joml.Vector3d;
@@ -32,6 +33,7 @@ public final class SubmarineController {
     }
 
     private static void tickSubmarine(ServerLevel level, SubmarineMetadata metadata) {
+        SubmarineTemplate template = SubmarineTemplates.get(metadata.templateId());
         ServerShip ship = VSGameUtilsKt.getShipObjectWorld(level).getAllShips().getById(metadata.shipId());
         if (ship == null) {
             SubmarineNetworking.clearInput(metadata.shipId());
@@ -40,7 +42,7 @@ public final class SubmarineController {
 
         SubmarineInput input = SubmarineNetworking.getInput(metadata.shipId());
         boolean hasFreshPilot = input != null
-                && level.getGameTime() - input.tick() <= StarterSubmarineTemplate.IDLE_STATIC_AFTER_TICKS
+                && level.getGameTime() - input.tick() <= template.idleStaticAfterTicks()
                 && isPilotStillMounted(level, metadata.shipId(), input);
 
         GameToPhysicsAdapter forces = ValkyrienSkiesMod.getOrCreateGTPA(VSGameUtilsKt.getDimensionId(level));
@@ -49,7 +51,7 @@ public final class SubmarineController {
         if (!hasFreshPilot) {
             if (underwater) {
                 forces.setStatic(ship.getId(), false);
-                applyBuoyancy(ship, forces);
+                applyBuoyancy(ship, forces, template);
             } else {
                 forces.setStatic(ship.getId(), true);
             }
@@ -59,17 +61,17 @@ public final class SubmarineController {
 
         forces.setStatic(ship.getId(), false);
         if (underwater) {
-            applyBuoyancy(ship, forces);
+            applyBuoyancy(ship, forces, template);
         }
-        applyPilotForces(ship, forces, input);
+        applyPilotForces(ship, forces, input, template);
     }
 
-    private static void applyBuoyancy(ServerShip ship, GameToPhysicsAdapter forces) {
+    private static void applyBuoyancy(ServerShip ship, GameToPhysicsAdapter forces, SubmarineTemplate template) {
         double mass = ship.getInertiaData().getMass();
         double y = ship.getTransform().getPositionInWorld().y();
-        double multiplier = y < StarterSubmarineTemplate.MIN_DEPTH ? 4.0 : 1.0;
+        double multiplier = y < template.minDepth() ? 4.0 : 1.0;
         forces.applyWorldForce(ship.getId(),
-                new Vector3d(0.0, mass * StarterSubmarineTemplate.BUOYANCY_GRAVITY * multiplier, 0.0),
+                new Vector3d(0.0, mass * template.buoyancyGravity() * multiplier, 0.0),
                 null);
     }
 
@@ -80,15 +82,15 @@ public final class SubmarineController {
                 && seat.getShipId() == shipId;
     }
 
-    private static void applyPilotForces(ServerShip ship, GameToPhysicsAdapter forces, SubmarineInput input) {
+    private static void applyPilotForces(ServerShip ship, GameToPhysicsAdapter forces, SubmarineInput input, SubmarineTemplate template) {
         Vector3d forward = ship.getTransform().getShipToWorld()
-                .transformDirection(new Vector3d(-1.0, 0.0, 0.0))
+                .transformDirection(new Vector3d(template.localForward()))
                 .normalize()
-                .mul(input.forward() * StarterSubmarineTemplate.FORWARD_FORCE);
-        Vector3d vertical = new Vector3d(0.0, input.vertical() * StarterSubmarineTemplate.VERTICAL_FORCE, 0.0);
-        Vector3d drag = new Vector3d(ship.getVelocity()).mul(-StarterSubmarineTemplate.LINEAR_DRAG);
-        Vector3d angularDrag = new Vector3d(ship.getAngularVelocity()).mul(-StarterSubmarineTemplate.ANGULAR_DRAG);
-        Vector3d yawTorque = new Vector3d(0.0, input.turn() * StarterSubmarineTemplate.YAW_TORQUE, 0.0);
+                .mul(input.forward() * template.forwardForce());
+        Vector3d vertical = new Vector3d(0.0, input.vertical() * template.verticalForce(), 0.0);
+        Vector3d drag = new Vector3d(ship.getVelocity()).mul(-template.linearDrag());
+        Vector3d angularDrag = new Vector3d(ship.getAngularVelocity()).mul(-template.angularDrag());
+        Vector3d yawTorque = new Vector3d(0.0, input.turn() * template.yawTorque(), 0.0);
 
         forces.applyWorldForce(ship.getId(), forward.add(vertical).add(drag), null);
         forces.applyWorldTorque(ship.getId(), yawTorque.add(angularDrag));

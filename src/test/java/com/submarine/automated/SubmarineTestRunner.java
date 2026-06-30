@@ -2,10 +2,6 @@ package com.submarine.automated;
 
 import java.awt.Rectangle;
 import java.awt.Robot;
-<<<<<<< HEAD
-import java.awt.Rectangle;
-=======
->>>>>>> 18c3b34e6c4faed0a9b9ab5b8543b551638fc862
 import java.awt.Toolkit;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
@@ -94,9 +90,15 @@ public final class SubmarineTestRunner {
     }
 
     private Process launchMinecraft() throws IOException {
-        String gradle = isWindows() ? "gradlew.bat" : "./gradlew";
-        ProcessBuilder builder = new ProcessBuilder(gradle, "runClient");
-        builder.directory(new File("."));
+        File workDir = new File(".").getCanonicalFile();
+        ProcessBuilder builder;
+        if (isWindows()) {
+            String bat = new File(workDir, "gradlew.bat").getAbsolutePath();
+            builder = new ProcessBuilder("cmd.exe", "/c", bat, "runClient");
+        } else {
+            builder = new ProcessBuilder("./gradlew", "runClient");
+        }
+        builder.directory(workDir);
         builder.environment().put("SUBMARINE_AUTOMATION_WORLD", WORLD_NAME);
         builder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
         builder.redirectError(ProcessBuilder.Redirect.INHERIT);
@@ -325,8 +327,15 @@ public final class SubmarineTestRunner {
 
     private static void stopGradleDaemon() {
         try {
-            String gradle = isWindows() ? "gradlew.bat" : "./gradlew";
-            new ProcessBuilder(gradle, "--stop")
+            File workDir = new File(".").getCanonicalFile();
+            List<String> cmd;
+            if (isWindows()) {
+                String bat = new File(workDir, "gradlew.bat").getAbsolutePath();
+                cmd = List.of("cmd.exe", "/c", bat, "--stop");
+            } else {
+                cmd = List.of("./gradlew", "--stop");
+            }
+            new ProcessBuilder(cmd)
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start();
