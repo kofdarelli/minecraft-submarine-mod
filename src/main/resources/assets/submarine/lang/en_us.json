@@ -5,5 +5,6 @@
   "message.submarine.place_blocked": "Submarine interiors can only be edited inside rooms.",
   "message.submarine.break_blocked": "That submarine block is protected.",
   "message.submarine.seat_taken": "That seat is occupied.",
-  "message.submarine.pilot_only": "Only the pilot seat controls the submarine."
+  "message.submarine.not_owner": "Only the owner can pilot this submarine.",
+  "message.submarine.pilot_only": "Only the pilot controls this submarine."
 }

@@ -31,6 +31,12 @@ public final class SubmarineSavedData extends SavedData {
         return submarines.values();
     }
 
+    public void remove(long shipId) {
+        if (submarines.remove(shipId) != null) {
+            setDirty();
+        }
+    }
+
     @Override
     public CompoundTag save(CompoundTag tag) {
         ListTag list = new ListTag();

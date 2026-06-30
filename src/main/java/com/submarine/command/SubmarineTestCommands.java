@@ -141,7 +141,11 @@ public final class SubmarineTestCommands {
     }
 
     private static void testMetadataRoundTrip(TestContext context) {
+<<<<<<< HEAD
         UUID owner = UUID.nameUUIDFromBytes("submarine-test-owner".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+=======
+        UUID owner = UUID.nameUUIDFromBytes("submarine-test-owner".getBytes(StandardCharsets.UTF_8));
+>>>>>>> 18c3b34e6c4faed0a9b9ab5b8543b551638fc862
         BlockPos origin = new BlockPos(10, 20, 30);
         SubmarineMetadata metadata = new SubmarineMetadata(42L, owner, StarterSubmarineTemplate.ID, "minecraft:overworld", origin);
         SubmarineMetadata loaded = SubmarineMetadata.load(metadata.save());

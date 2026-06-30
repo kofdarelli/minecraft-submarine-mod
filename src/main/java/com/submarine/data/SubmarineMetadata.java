@@ -59,6 +59,10 @@ public final class SubmarineMetadata {
         return tag;
     }
 
+    public SubmarineMetadata withOwner(UUID newOwner) {
+        return new SubmarineMetadata(shipId, newOwner, templateId, dimensionId, shipyardOrigin);
+    }
+
     public static SubmarineMetadata load(CompoundTag tag) {
         return new SubmarineMetadata(
                 tag.getLong("ShipId"),

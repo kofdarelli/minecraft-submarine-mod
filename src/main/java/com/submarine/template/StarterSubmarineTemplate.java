@@ -13,6 +13,8 @@ import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.StairBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.block.state.properties.StairsShape;
@@ -29,6 +31,8 @@ public final class StarterSubmarineTemplate {
     public static final double LINEAR_DRAG = 12000.0;
     public static final double ANGULAR_DRAG = 80000.0;
     public static final int IDLE_STATIC_AFTER_TICKS = 8;
+    public static final double BUOYANCY_GRAVITY = 10.0;
+    public static final double MIN_DEPTH = -60.0;
 
     public static final List<SeatSpec> SEATS = List.of(
             new SeatSpec(0, new BlockPos(2, 1, 3), Direction.WEST),
@@ -69,6 +73,13 @@ public final class StarterSubmarineTemplate {
             }
         }
 
+        // Back wall — closes the open stern
+        for (int y = 1; y <= 3; y++) {
+            for (int z = 1; z <= 5; z++) {
+                blocks.put(local(LENGTH - 1, y, z), hull);
+            }
+        }
+
         for (int x : new int[]{5, 6, 10, 11, 15, 16}) {
             blocks.put(local(x, 2, 0), glass);
             blocks.put(local(x, 2, 6), glass);
@@ -80,8 +91,9 @@ public final class StarterSubmarineTemplate {
                 blocks.put(local(x, 5, z), rim ? hull : Blocks.AIR.defaultBlockState());
             }
         }
-        blocks.put(local(10, 6, 3), Blocks.SEA_LANTERN.defaultBlockState());
-        blocks.put(local(10, 4, 3), Blocks.IRON_TRAPDOOR.defaultBlockState());
+        blocks.put(local(10, 4, 3), Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(TrapDoorBlock.HALF, Half.TOP)
+                .setValue(TrapDoorBlock.FACING, Direction.NORTH));
 
         putSeatBlocks(blocks);
         putInteriorBlocks(blocks);

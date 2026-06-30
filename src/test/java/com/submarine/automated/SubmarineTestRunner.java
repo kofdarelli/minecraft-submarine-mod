@@ -1,7 +1,11 @@
 package com.submarine.automated;
 
-import java.awt.Robot;
 import java.awt.Rectangle;
+import java.awt.Robot;
+<<<<<<< HEAD
+import java.awt.Rectangle;
+=======
+>>>>>>> 18c3b34e6c4faed0a9b9ab5b8543b551638fc862
 import java.awt.Toolkit;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;

@@ -44,14 +44,33 @@ public final class SubmarineController {
                 && isPilotStillMounted(level, metadata.shipId(), input);
 
         GameToPhysicsAdapter forces = ValkyrienSkiesMod.getOrCreateGTPA(VSGameUtilsKt.getDimensionId(level));
+        boolean underwater = ship.getTransform().getPositionInWorld().y() < level.getSeaLevel();
+
         if (!hasFreshPilot) {
-            forces.setStatic(ship.getId(), true);
+            if (underwater) {
+                forces.setStatic(ship.getId(), false);
+                applyBuoyancy(ship, forces);
+            } else {
+                forces.setStatic(ship.getId(), true);
+            }
             SubmarineNetworking.clearInput(metadata.shipId());
             return;
         }
 
         forces.setStatic(ship.getId(), false);
+        if (underwater) {
+            applyBuoyancy(ship, forces);
+        }
         applyPilotForces(ship, forces, input);
+    }
+
+    private static void applyBuoyancy(ServerShip ship, GameToPhysicsAdapter forces) {
+        double mass = ship.getInertiaData().getMass();
+        double y = ship.getTransform().getPositionInWorld().y();
+        double multiplier = y < StarterSubmarineTemplate.MIN_DEPTH ? 4.0 : 1.0;
+        forces.applyWorldForce(ship.getId(),
+                new Vector3d(0.0, mass * StarterSubmarineTemplate.BUOYANCY_GRAVITY * multiplier, 0.0),
+                null);
     }
 
     private static boolean isPilotStillMounted(ServerLevel level, long shipId, SubmarineInput input) {
@@ -68,7 +87,7 @@ public final class SubmarineController {
                 .mul(input.forward() * StarterSubmarineTemplate.FORWARD_FORCE);
         Vector3d vertical = new Vector3d(0.0, input.vertical() * StarterSubmarineTemplate.VERTICAL_FORCE, 0.0);
         Vector3d drag = new Vector3d(ship.getVelocity()).mul(-StarterSubmarineTemplate.LINEAR_DRAG);
-        Vector3d angularDrag = new Vector3d(ship.getOmega()).mul(-StarterSubmarineTemplate.ANGULAR_DRAG);
+        Vector3d angularDrag = new Vector3d(ship.getAngularVelocity()).mul(-StarterSubmarineTemplate.ANGULAR_DRAG);
         Vector3d yawTorque = new Vector3d(0.0, input.turn() * StarterSubmarineTemplate.YAW_TORQUE, 0.0);
 
         forces.applyWorldForce(ship.getId(), forward.add(vertical).add(drag), null);
