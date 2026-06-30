@@ -12,6 +12,7 @@ public final class SubmarineClient implements ClientModInitializer {
     public void onInitializeClient() {
         EntityRendererRegistry.register(ModEntities.SEAT, EmptySeatRenderer::new);
         SubmarineClientInput.register();
+        SubmarineAutomationClient.register();
         ClientPlayNetworking.registerGlobalReceiver(SubmarineNetworking.QUIT_CLIENT,
                 (client, handler, buf, responseSender) -> client.execute(client::stop));
     }

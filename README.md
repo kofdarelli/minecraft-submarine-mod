@@ -39,12 +39,23 @@ In a dev world with commands enabled, run the submarine smoke tests:
 /submarine test run
 ```
 
-The smoke test clears a small area ahead of the player and leaves a spawned test submarine in the world.
+Target a smaller area when debugging:
 
-On Windows, the automated client smoke test builds the mod, launches `runClient`, opens the first singleplayer world, runs `/submarine test run`, watches `run/logs/latest.log`, and exits nonzero on failure:
+```text
+/submarine test template
+/submarine test metadata
+/submarine test spawn
+```
+
+The smoke test clears a small area ahead of the player and leaves a spawned test submarine in the world.
+Results are written to `build/test-results/submarine-smoke/results.json`.
+
+On Windows, the automated client smoke test builds the mod, launches `runClient`, creates or opens the disposable `run/saves/SubmarineAutomationTest` world, runs `/submarine test run`, watches `run/logs/latest.log`, and exits nonzero on failure:
 
 ```powershell
 .\run-test.ps1
 ```
 
-Set `SUBMARINE_TEST_SKIP_MENU=true` if the client will already be loaded into a world before the test command is sent.
+Set `SUBMARINE_TEST_WORLD_NAME` to use a different disposable world name. Set `SUBMARINE_TEST_RESET_WORLD=false` to reuse the disposable world instead of deleting it before the run.
+If the first launch is still downloading assets or preparing the dev client, increase `SUBMARINE_TEST_WORLD_READY_TIMEOUT_MS`.
+The runner also copies failure artifacts to `build/test-results/submarine-smoke/`, including the latest log, log tail, runner summary, and a screenshot when available.
