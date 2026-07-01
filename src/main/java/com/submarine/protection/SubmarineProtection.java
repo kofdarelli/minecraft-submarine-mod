@@ -1,5 +1,6 @@
 package com.submarine.protection;
 
+import com.submarine.SubmarineMod;
 import com.submarine.data.SubmarineMetadata;
 import com.submarine.data.SubmarineSavedData;
 import com.submarine.item.ModItems;
@@ -23,7 +24,9 @@ import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
+import org.joml.Vector3d;
 import org.valkyrienskies.core.api.ships.Ship;
 import org.valkyrienskies.mod.common.VSGameUtilsKt;
 
@@ -37,12 +40,18 @@ public final class SubmarineProtection {
                 return InteractionResult.PASS;
             }
 
-            Optional<SubmarineMetadata> metadata = metadataAt(level, hitResult.getBlockPos());
-            if (metadata.isEmpty()) {
+            Optional<SubmarineInteraction> interaction = resolveInteraction(level, hitResult);
+            if (interaction.isEmpty()) {
+                SubmarineMod.LOGGER.info("[seat-debug] right-click on {} did not resolve to any submarine (hand={})",
+                        hitResult.getBlockPos(), hand);
                 return InteractionResult.PASS;
             }
+            SubmarineMetadata metadata = interaction.get().metadata();
+            SubmarineMod.LOGGER.info("[seat-debug] right-click resolved to ship {} at shipyardPos {} (local {})",
+                    metadata.shipId(), interaction.get().shipyardPos(), metadata.toLocal(interaction.get().shipyardPos()));
 
-            InteractionResult seatResult = SubmarineSeatManager.tryUseSeat(serverPlayer, level, metadata.get(), hitResult.getBlockPos());
+            InteractionResult seatResult = SubmarineSeatManager.tryUseSeat(serverPlayer, level, metadata, interaction.get().shipyardPos());
+            SubmarineMod.LOGGER.info("[seat-debug] tryUseSeat returned {}", seatResult);
             if (seatResult != InteractionResult.PASS) {
                 return seatResult;
             }
@@ -54,7 +63,7 @@ public final class SubmarineProtection {
             }
             if (stack.getItem() instanceof BlockItem) {
                 BlockPlaceContext placeContext = new BlockPlaceContext(new UseOnContext(player, hand, hitResult));
-                if (!canPlace(level, placeContext.getClickedPos(), metadata.get())) {
+                if (!canPlace(level, placeContext.getClickedPos(), metadata)) {
                     player.displayClientMessage(Component.translatable("message.submarine.place_blocked"), true);
                     return InteractionResult.FAIL;
                 }
@@ -84,6 +93,35 @@ public final class SubmarineProtection {
             return Optional.empty();
         }
         return SubmarineSavedData.get(level).get(ship.getId());
+    }
+
+    public static Optional<SubmarineInteraction> resolveInteraction(ServerLevel level, BlockHitResult hitResult) {
+        BlockPos hitPos = hitResult.getBlockPos();
+        Optional<SubmarineMetadata> directMetadata = metadataAt(level, hitPos);
+        if (directMetadata.isPresent()) {
+            return Optional.of(new SubmarineInteraction(directMetadata.get(), hitPos));
+        }
+
+        AABB searchBox = new AABB(hitResult.getLocation(), hitResult.getLocation()).inflate(0.5);
+        for (Ship ship : VSGameUtilsKt.getShipsIntersecting(level, searchBox)) {
+            Optional<SubmarineMetadata> metadata = SubmarineSavedData.get(level).get(ship.getId());
+            if (metadata.isEmpty()) {
+                continue;
+            }
+            Vector3d shipyardHit = ship.getWorldToShip().transformPosition(new Vector3d(
+                    hitResult.getLocation().x,
+                    hitResult.getLocation().y,
+                    hitResult.getLocation().z
+            ));
+            return Optional.of(new SubmarineInteraction(
+                    metadata.get(),
+                    BlockPos.containing(shipyardHit.x(), shipyardHit.y(), shipyardHit.z())
+            ));
+        }
+        return Optional.empty();
+    }
+
+    public record SubmarineInteraction(SubmarineMetadata metadata, BlockPos shipyardPos) {
     }
 
     private static boolean canBreak(BlockPos shipyardPos, SubmarineMetadata metadata) {
@@ -119,6 +157,6 @@ public final class SubmarineProtection {
         return blockItem.getBlock() == Blocks.TNT
                 || blockItem.getBlock() == Blocks.NETHER_PORTAL
                 || blockItem.getBlock() == Blocks.END_PORTAL
-                || stack.getItem() == ModItems.SUBMARINE_BLUEPRINT;
+                || ModItems.isBlueprint(stack.getItem());
     }
 }

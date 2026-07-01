@@ -8,9 +8,12 @@ import com.submarine.data.SubmarineSavedData;
 import com.submarine.entity.ModEntities;
 import com.submarine.entity.SubmarineSeatEntity;
 import com.submarine.net.SubmarineNetworking;
+import com.submarine.protection.SubmarineProtection;
 import com.submarine.seat.SubmarineSeatManager;
 import com.submarine.template.StarterSubmarineTemplate;
 import com.submarine.template.SubmarineSpawner;
+import com.submarine.template.SubmarineTemplate;
+import com.submarine.template.SubmarineTemplates;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -20,18 +23,25 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Vector3d;
 import org.valkyrienskies.core.api.ships.ServerShip;
 
 public final class SubmarineTestCommands {
@@ -130,7 +140,9 @@ public final class SubmarineTestCommands {
         require(!blocks.isEmpty(), "starter template has no blocks");
         require(blocks.get(new BlockPos(0, 4, 4)).is(Blocks.CYAN_STAINED_GLASS), "cockpit canopy is missing");
         require(blocks.get(new BlockPos(15, 5, 4)).is(Blocks.LADDER), "conning tower ladder is missing");
-        require(blocks.get(new BlockPos(15, 11, 4)).is(Blocks.SEA_LANTERN), "conning tower beacon is missing");
+        require(blocks.get(new BlockPos(15, 11, 4)).is(Blocks.OAK_TRAPDOOR), "conning tower hatch is missing");
+        require(blocks.get(new BlockPos(15, 11, 4)).getValue(TrapDoorBlock.OPEN) == false, "conning tower hatch should start closed");
+        require(blocks.get(new BlockPos(15, 11, 3)).is(Blocks.SEA_LANTERN), "conning tower beacon is missing");
         require(StarterSubmarineTemplate.SEATS.size() == 5, "expected 5 seat specs");
         require(StarterSubmarineTemplate.seatAt(new BlockPos(3, 3, 4)) != null, "pilot seat spec is missing");
         require(StarterSubmarineTemplate.isEditable(new BlockPos(10, 4, 4)), "interior edit volume is not editable");
@@ -162,18 +174,71 @@ public final class SubmarineTestCommands {
         ServerShip ship = SubmarineSpawner.spawnStarterSub(context.level(), context.player(), origin);
         require(ship != null, "ship assembler returned null");
 
-        SubmarineMetadata metadata = SubmarineSavedData.get(context.level()).get(ship.getId())
-                .orElseThrow(() -> new IllegalStateException("spawned ship metadata was not saved"));
-        require(StarterSubmarineTemplate.ID.equals(metadata.templateId()), "spawned metadata uses the wrong template");
-        require(context.player().getUUID().equals(metadata.owner()), "spawned metadata uses the wrong owner");
+        try {
+            SubmarineMetadata metadata = SubmarineSavedData.get(context.level()).get(ship.getId())
+                    .orElseThrow(() -> new IllegalStateException("spawned ship metadata was not saved"));
+            require(StarterSubmarineTemplate.ID.equals(metadata.templateId()), "spawned metadata uses the wrong template");
+            require(context.player().getUUID().equals(metadata.owner()), "spawned metadata uses the wrong owner");
 
-        SubmarineSeatManager.ensureSeats(context.level(), metadata);
-        List<SubmarineSeatEntity> seats = findSeats(context.level(), metadata.shipId(), metadata.shipyardOrigin());
-        require(seats.size() == StarterSubmarineTemplate.SEATS.size(),
-                "expected " + StarterSubmarineTemplate.SEATS.size() + " seats, found " + seats.size());
-        require(seats.stream().anyMatch(SubmarineSeatEntity::isPilotSeat), "pilot seat entity was not created");
+            SubmarineSeatManager.ensureSeats(context.level(), metadata);
+            List<SubmarineSeatEntity> seats = findSeats(context.level(), metadata.shipId(), metadata.shipyardOrigin());
+            require(seats.size() == StarterSubmarineTemplate.SEATS.size(),
+                    "expected " + StarterSubmarineTemplate.SEATS.size() + " seats, found " + seats.size());
+            require(seats.stream().anyMatch(SubmarineSeatEntity::isPilotSeat), "pilot seat entity was not created");
 
-        context.source().sendSuccess(() -> Component.literal("   spawned ship id " + ship.getId() + " with " + seats.size() + " seats"), false);
+            BlockPos pilotShipyardPos = metadata.toShipyard(StarterSubmarineTemplate.SEATS.get(0).localPos());
+            Vector3d pilotWorldCenter = ship.getTransform().getShipToWorld().transformPosition(new Vector3d(
+                    pilotShipyardPos.getX() + 0.5,
+                    pilotShipyardPos.getY() + 0.5,
+                    pilotShipyardPos.getZ() + 0.5
+            ));
+            BlockHitResult visibleSeatClick = new BlockHitResult(
+                    new Vec3(pilotWorldCenter.x(), pilotWorldCenter.y(), pilotWorldCenter.z()),
+                    Direction.UP,
+                    BlockPos.containing(pilotWorldCenter.x(), pilotWorldCenter.y(), pilotWorldCenter.z()),
+                    false
+            );
+            SubmarineProtection.SubmarineInteraction interaction = SubmarineProtection.resolveInteraction(context.level(), visibleSeatClick)
+                    .orElseThrow(() -> new IllegalStateException("visible pilot seat click did not resolve to submarine metadata"));
+            require(interaction.metadata().shipId() == metadata.shipId(), "visible pilot seat click resolved to the wrong ship");
+            require(interaction.shipyardPos().distManhattan(pilotShipyardPos) <= 1,
+                    "visible pilot seat click resolved to " + interaction.shipyardPos() + " instead of " + pilotShipyardPos);
+
+            InteractionResult seatResult = SubmarineSeatManager.tryUseSeat(context.player(), context.level(), metadata, interaction.shipyardPos());
+            require(seatResult == InteractionResult.SUCCESS, "pilot seat use returned " + seatResult);
+            if (!(context.player().getVehicle() instanceof SubmarineSeatEntity mountedSeat)) {
+                throw new IllegalStateException("player did not mount a submarine seat");
+            }
+            require(mountedSeat.isPilotSeat(), "player mounted a passenger seat instead of the pilot seat");
+            require(mountedSeat.getShipId() == metadata.shipId(), "mounted seat belongs to the wrong ship");
+            context.player().stopRiding();
+
+            context.source().sendSuccess(() -> Component.literal("   spawned ship id " + ship.getId() + " with " + seats.size() + " seats"), false);
+        } finally {
+            // The spawn test creates a real, permanent VS2 ship + seat entities in the player's
+            // world. Without explicit teardown here, every "/submarine test run" leaves a derelict
+            // submarine behind that gets ticked forever by SubmarineController/SubmarineSeatManager.
+            cleanupTestSubmarine(context.level(), ship.getId());
+        }
+    }
+
+    private static void cleanupTestSubmarine(ServerLevel level, long shipId) {
+        Optional<SubmarineMetadata> metadataOpt = SubmarineSavedData.get(level).get(shipId);
+        if (metadataOpt.isEmpty()) {
+            return;
+        }
+        SubmarineMetadata metadata = metadataOpt.get();
+        SubmarineTemplate template = SubmarineTemplates.get(metadata.templateId());
+        AABB searchBox = new AABB(metadata.shipyardOrigin()).inflate(template.searchRadius());
+        for (SubmarineSeatEntity seat : new ArrayList<>(
+                level.getEntities(ModEntities.SEAT, searchBox, s -> s.getShipId() == shipId))) {
+            seat.ejectPassengers();
+            seat.discard();
+        }
+        for (BlockPos localPos : template.allLocalPositions()) {
+            level.setBlock(metadata.toShipyard(localPos), Blocks.AIR.defaultBlockState(), 3);
+        }
+        SubmarineSavedData.get(level).remove(shipId);
     }
 
     private static BlockPos testOrigin(ServerPlayer player) {

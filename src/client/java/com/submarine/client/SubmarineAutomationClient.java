@@ -13,8 +13,10 @@ import net.minecraft.world.level.levelgen.presets.WorldPresets;
 
 public final class SubmarineAutomationClient {
     private static final String WORLD_ENV = "SUBMARINE_AUTOMATION_WORLD";
+    private static final String COMMAND_ENV = "SUBMARINE_AUTOMATION_COMMAND";
     private static boolean openRequested;
     private static boolean readyLogged;
+    private static boolean commandSent;
 
     private SubmarineAutomationClient() {
     }
@@ -25,15 +27,25 @@ public final class SubmarineAutomationClient {
             return;
         }
 
-        ClientTickEvents.END_CLIENT_TICK.register(client -> tick(client, worldName.trim()));
+        String command = System.getenv(COMMAND_ENV);
+        ClientTickEvents.END_CLIENT_TICK.register(client -> tick(client, worldName.trim(), command));
         SubmarineMod.LOGGER.info("Submarine automation world requested: {}", worldName.trim());
     }
 
-    private static void tick(Minecraft client, String worldName) {
+    private static void tick(Minecraft client, String worldName, String command) {
         if (client.player != null) {
             if (!readyLogged) {
                 readyLogged = true;
                 SubmarineMod.LOGGER.info("Submarine automation world ready: {}", worldName);
+            }
+            if (!commandSent && command != null && !command.isBlank() && client.player.connection != null) {
+                commandSent = true;
+                String normalized = command.trim();
+                if (normalized.startsWith("/")) {
+                    normalized = normalized.substring(1);
+                }
+                SubmarineMod.LOGGER.info("Running submarine automation command: /{}", normalized);
+                client.player.connection.sendCommand(normalized);
             }
             return;
         }

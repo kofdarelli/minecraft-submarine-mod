@@ -1,5 +1,6 @@
 package com.submarine.seat;
 
+import com.submarine.SubmarineMod;
 import com.submarine.data.SubmarineMetadata;
 import com.submarine.data.SubmarineSavedData;
 import com.submarine.entity.ModEntities;
@@ -33,6 +34,7 @@ public final class SubmarineSeatManager {
                     continue;
                 }
                 if (VSGameUtilsKt.getShipObjectWorld(level).getAllShips().getById(metadata.shipId()) == null) {
+                    discardOrphanedSeats(level, metadata);
                     SubmarineSavedData.get(level).remove(metadata.shipId());
                     continue;
                 }
@@ -43,19 +45,25 @@ public final class SubmarineSeatManager {
 
     public static InteractionResult tryUseSeat(ServerPlayer player, ServerLevel level, SubmarineMetadata metadata, BlockPos shipyardPos) {
         SubmarineTemplate template = SubmarineTemplates.get(metadata.templateId());
-        SeatSpec seatSpec = template.seatAt(metadata.toLocal(shipyardPos));
+        BlockPos localPos = metadata.toLocal(shipyardPos);
+        SeatSpec seatSpec = findSeatForClick(template, localPos);
         if (seatSpec == null) {
+            SubmarineMod.LOGGER.info("[seat-debug] no seat spec near local {} (known seats: {})",
+                    localPos, template.seats());
             return InteractionResult.PASS;
         }
+        SubmarineMod.LOGGER.info("[seat-debug] matched seat index {} at local {}", seatSpec.index(), seatSpec.localPos());
 
         if (seatSpec.index() == 0 && !isAllowedPilot(player, metadata)) {
             player.displayClientMessage(Component.translatable("message.submarine.not_owner"), true);
+            SubmarineMod.LOGGER.info("[seat-debug] denied: {} is not the owner/op", player.getGameProfile().getName());
             return InteractionResult.FAIL;
         }
 
         SubmarineSeatEntity seat = findOrCreateSeat(level, metadata, seatSpec);
         if (!seat.getPassengers().isEmpty()) {
             player.displayClientMessage(Component.translatable("message.submarine.seat_taken"), true);
+            SubmarineMod.LOGGER.info("[seat-debug] seat {} already occupied", seat.getId());
             return InteractionResult.SUCCESS;
         }
 
@@ -70,7 +78,9 @@ public final class SubmarineSeatManager {
             player.connection.send(new ClientboundSetEntityDataPacket(seat.getId(), nonDefault));
         }
 
-        if (!player.startRiding(seat, true)) {
+        boolean mounted = player.startRiding(seat, true);
+        SubmarineMod.LOGGER.info("[seat-debug] startRiding seat {} at {} -> {}", seat.getId(), seat.position(), mounted);
+        if (!mounted) {
             return InteractionResult.FAIL;
         }
         return InteractionResult.SUCCESS;
@@ -83,8 +93,31 @@ public final class SubmarineSeatManager {
         }
     }
 
+    private static void discardOrphanedSeats(ServerLevel level, SubmarineMetadata metadata) {
+        SubmarineTemplate template = SubmarineTemplates.get(metadata.templateId());
+        AABB searchBox = new AABB(metadata.shipyardOrigin()).inflate(template.searchRadius());
+        for (SubmarineSeatEntity seat : new ArrayList<>(
+                level.getEntities(ModEntities.SEAT, searchBox, s -> s.getShipId() == metadata.shipId()))) {
+            seat.ejectPassengers();
+            seat.discard();
+        }
+    }
+
     private static boolean isAllowedPilot(ServerPlayer player, SubmarineMetadata metadata) {
         return player.hasPermissions(2) || metadata.owner().equals(player.getUUID());
+    }
+
+    private static SeatSpec findSeatForClick(SubmarineTemplate template, BlockPos localPos) {
+        SeatSpec exact = template.seatAt(localPos);
+        if (exact != null) {
+            return exact;
+        }
+        for (SeatSpec seat : template.seats()) {
+            if (seat.localPos().distManhattan(localPos) <= 1) {
+                return seat;
+            }
+        }
+        return null;
     }
 
     private static SubmarineSeatEntity findOrCreateSeat(ServerLevel level, SubmarineMetadata metadata, SeatSpec seatSpec) {

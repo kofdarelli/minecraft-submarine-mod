@@ -1,7 +1,8 @@
 {
   "item.submarine.submarine_blueprint": "Submarine Blueprint",
+  "item.submarine.ocean_pearl_blueprint": "Ocean Pearl Blueprint",
   "itemGroup.submarine.submarine": "Submarine",
-  "command.submarine.spawned": "Starter submarine launched.",
+  "command.submarine.spawned": "Submarine launched.",
   "message.submarine.place_blocked": "Submarine interiors can only be edited inside rooms.",
   "message.submarine.break_blocked": "That submarine block is protected.",
   "message.submarine.seat_taken": "That seat is occupied.",

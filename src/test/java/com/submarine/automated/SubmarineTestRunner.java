@@ -3,6 +3,7 @@ package com.submarine.automated;
 import java.awt.Rectangle;
 import java.awt.Robot;
 import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -29,9 +30,11 @@ public final class SubmarineTestRunner {
     private static final Path OPTIONS_FILE = Path.of("run", "options.txt");
     private static final Path SAVES_DIR = Path.of("run", "saves");
     private static final Path ARTIFACT_DIR = Path.of("build", "test-results", "submarine-smoke");
+    private static final Path RUN_RESULT_JSON = Path.of("run", "build", "test-results", "submarine-smoke", "results.json");
     private static final int LAUNCH_WAIT_MS = intSetting("SUBMARINE_TEST_LAUNCH_WAIT_MS", 15000);
     private static final int WORLD_READY_TIMEOUT_MS = intSetting("SUBMARINE_TEST_WORLD_READY_TIMEOUT_MS", 300000);
     private static final int TEST_TIMEOUT_MS = intSetting("SUBMARINE_TEST_TIMEOUT_MS", 60000);
+    private static final int FOCUS_TIMEOUT_MS = intSetting("SUBMARINE_TEST_FOCUS_TIMEOUT_MS", 10000);
     private static final int POLL_INTERVAL_MS = 250;
 
     private final TestStatus status = new TestStatus();
@@ -68,13 +71,7 @@ public final class SubmarineTestRunner {
                 return 1;
             }
 
-            sendCommand(robot, TEST_COMMAND);
             passed = waitForTestResult(minecraft);
-
-            try {
-                sendCommand(robot, QUIT_COMMAND);
-            } catch (Exception ignored) {
-            }
 
             writeResult(passed ? "PASS" : "FAIL");
             return passed ? 0 : 1;
@@ -94,12 +91,13 @@ public final class SubmarineTestRunner {
         ProcessBuilder builder;
         if (isWindows()) {
             String bat = new File(workDir, "gradlew.bat").getAbsolutePath();
-            builder = new ProcessBuilder("cmd.exe", "/c", bat, "runClient");
+            builder = new ProcessBuilder("cmd.exe", "/c", bat, "runClient", "--no-daemon");
         } else {
-            builder = new ProcessBuilder("./gradlew", "runClient");
+            builder = new ProcessBuilder("./gradlew", "runClient", "--no-daemon");
         }
         builder.directory(workDir);
         builder.environment().put("SUBMARINE_AUTOMATION_WORLD", WORLD_NAME);
+        builder.environment().put("SUBMARINE_AUTOMATION_COMMAND", TEST_COMMAND);
         builder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
         builder.redirectError(ProcessBuilder.Redirect.INHERIT);
         return builder.start();
@@ -177,10 +175,13 @@ public final class SubmarineTestRunner {
     }
 
     private void sendCommand(Robot robot, String command) throws InterruptedException {
+        if (!refocusMinecraftWindow()) {
+            throw new IllegalStateException("Could not refocus the Minecraft window before sending command: " + command);
+        }
         Thread.sleep(500);
         press(robot, KeyEvent.VK_T);
-        Thread.sleep(250);
-        type(robot, command);
+        Thread.sleep(750);
+        paste(robot, command);
         Thread.sleep(250);
         press(robot, KeyEvent.VK_ENTER);
     }
@@ -252,6 +253,7 @@ public final class SubmarineTestRunner {
         try {
             Files.createDirectories(ARTIFACT_DIR);
             writeRunnerSummary(passed, failure);
+            copySmokeResultArtifact();
             copyLogArtifact();
             writeLogTail();
             if (!passed) {
@@ -275,6 +277,12 @@ public final class SubmarineTestRunner {
                     .append(failure.getMessage()).append(System.lineSeparator());
         }
         Files.writeString(ARTIFACT_DIR.resolve("runner-summary.txt"), summary.toString(), StandardCharsets.UTF_8);
+    }
+
+    private static void copySmokeResultArtifact() throws IOException {
+        if (Files.exists(RUN_RESULT_JSON)) {
+            Files.copy(RUN_RESULT_JSON, ARTIFACT_DIR.resolve("results.json"), StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private static void copyLogArtifact() throws IOException {
@@ -312,7 +320,14 @@ public final class SubmarineTestRunner {
             stopGradleDaemon();
             return;
         }
-        process.destroy();
+        if (isWindows()) {
+            // process.destroy() only signals the cmd.exe wrapper; the actual Minecraft
+            // client JVM is a grandchild (forked by the gradlew.bat -> gradle build), and
+            // Windows does not cascade termination to descendants. Kill the whole tree.
+            killProcessTreeWindows(process.pid());
+        } else {
+            process.destroy();
+        }
         try {
             if (!process.waitFor(8, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
@@ -322,6 +337,19 @@ public final class SubmarineTestRunner {
             process.destroyForcibly();
         } finally {
             stopGradleDaemon();
+        }
+    }
+
+    private static void killProcessTreeWindows(long pid) {
+        try {
+            new ProcessBuilder("taskkill", "/PID", Long.toString(pid), "/T", "/F")
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start()
+                    .waitFor(8, TimeUnit.SECONDS);
+        } catch (IOException ignored) {
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -343,6 +371,61 @@ public final class SubmarineTestRunner {
         }
     }
 
+    private static boolean refocusMinecraftWindow() throws InterruptedException {
+        if (!isWindows()) {
+            return true;
+        }
+
+        String script = """
+                Add-Type -TypeDefinition @'
+                using System;
+                using System.Runtime.InteropServices;
+                public static class NativeWindow {
+                    [DllImport("user32.dll")]
+                    public static extern bool SetForegroundWindow(IntPtr hWnd);
+                    [DllImport("user32.dll")]
+                    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+                }
+                '@ -ErrorAction SilentlyContinue
+                $deadline = [DateTime]::UtcNow.AddMilliseconds(%d)
+                do {
+                    $window = Get-Process | Where-Object {
+                        $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -match 'Minecraft'
+                    } | Select-Object -First 1
+                    if ($window) {
+                        [NativeWindow]::ShowWindowAsync($window.MainWindowHandle, 9) | Out-Null
+                        [NativeWindow]::SetForegroundWindow($window.MainWindowHandle) | Out-Null
+                        Start-Sleep -Milliseconds 300
+                        exit 0
+                    }
+                    Start-Sleep -Milliseconds 250
+                } while ([DateTime]::UtcNow -lt $deadline)
+                exit 1
+                """.formatted(FOCUS_TIMEOUT_MS);
+        try {
+            Process process = new ProcessBuilder(
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    script
+            )
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            int timeoutMs = FOCUS_TIMEOUT_MS + 5000;
+            if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly();
+                return false;
+            }
+            return process.exitValue() == 0;
+        } catch (IOException exception) {
+            System.err.println("Could not refocus Minecraft window: " + exception.getMessage());
+            return false;
+        }
+    }
+
     private static void press(Robot robot, int keyCode) {
         robot.keyPress(keyCode);
         robot.keyRelease(keyCode);
@@ -352,6 +435,14 @@ public final class SubmarineTestRunner {
         for (char c : text.toCharArray()) {
             typeChar(robot, c);
         }
+    }
+
+    private static void paste(Robot robot, String text) {
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
+        robot.keyPress(KeyEvent.VK_CONTROL);
+        robot.keyPress(KeyEvent.VK_V);
+        robot.keyRelease(KeyEvent.VK_V);
+        robot.keyRelease(KeyEvent.VK_CONTROL);
     }
 
     private static void typeChar(Robot robot, char c) {
